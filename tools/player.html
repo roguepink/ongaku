@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>__TITLE__</title>
+<style>
+  :root { --accent: __COLOR__; --bg: #0b0b10; --text: #f4f1ea; --muted: #8d8a95; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  .bg { position: fixed; inset: 0; background-size: cover; background-position: center;
+    filter: blur(40px) brightness(.35) saturate(1.2); transform: scale(1.2); transition: background-image .6s; }
+  main { position: relative; max-width: 520px; margin: 0 auto; padding: 28px 20px 40px; }
+
+  .head { display: flex; gap: 16px; align-items: center; }
+  .cover { width: 108px; height: 108px; border-radius: 14px; object-fit: cover; flex: none;
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,.8); }
+  h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: .02em; }
+  .artist { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+  .tabs { display: flex; gap: 8px; margin-top: 20px; }
+  .tabs button { flex: 1; padding: 10px 0; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); color: var(--muted); }
+  .tabs button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+
+  .player { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+  .play { width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--accent); flex: none;
+    display: grid; place-items: center; }
+  .play svg { width: 22px; height: 22px; fill: var(--bg); }
+  .bar { flex: 1; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .time { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+  .lyrics { position: relative; margin-top: 18px; height: 56vh; overflow-y: auto; padding: 24vh 4px;
+    -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+            mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+    scrollbar-width: none; }
+  .lyrics::-webkit-scrollbar { display: none; }
+  .line { font-size: 19px; font-weight: 800; line-height: 1.5; padding: 7px 0; color: rgba(244,241,234,.32);
+    transition: color .3s, transform .3s; transform-origin: left center; cursor: pointer; }
+  .line.gap { margin-top: 26px; }
+  .line.past { color: rgba(244,241,234,.5); }
+  .line.now { transform: scale(1.06); color: rgba(244,241,234,.95); }
+  .line.now span { background-image: linear-gradient(90deg, var(--accent) var(--p, 0%), rgba(244,241,234,.95) var(--p, 0%));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 0 transparent; }
+
+  .dl { display: block; margin-top: 22px; padding: 15px; border-radius: 14px; text-align: center; font-weight: 800;
+    color: var(--text); text-decoration: none; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); }
+  .note { margin-top: 10px; font-size: 12px; line-height: 1.8; color: var(--muted); }
+  .test { margin-top: 26px; font-size: 11px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<div class="bg" id="bg"></div>
+<main>
+  <div class="head">
+    <img class="cover" id="cover" alt="">
+    <div>
+      <h1>__TITLE__</h1>
+      <div class="artist">__ARTIST__ ・ Suno AI で制作</div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="player">
+    <button class="play" id="play" aria-label="再生">
+      <svg viewBox="0 0 24 24" id="icon"><path d="M7 4l14 8-14 8z"/></svg>
+    </button>
+    <div class="bar">
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="再生位置">
+      <div class="time"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+    </div>
+  </div>
+
+  <div class="lyrics" id="lyrics"></div>
+
+  <a class="dl" id="dl">この曲をダウンロード</a>
+  <p class="note">
+    iPhone は「ファイル」アプリに保存され、そこで再生できます。<br>
+    LINE から開いたときは、右上のメニューから Safari / Chrome で開いてください。
+  </p>
+  <p class="test">試作版(まだ公開していません)</p>
+</main>
+<audio id="audio" preload="metadata" playsinline></audio>
+
+<script>
+const SONG = __DATA__;
+const audio = document.getElementById("audio");
+const box = document.getElementById("lyrics");
+const seek = document.getElementById("seek");
+let lines = [], cur = -1, userScrollUntil = 0, ver = null;
+
+const fmt = s => isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "0:00";
+const PLAY = "M7 4l14 8-14 8z", PAUSE = "M6 4h4v16H6zM14 4h4v16h-4z";
+
+async function src(u) {  // 1ファイル版は中身を埋め込んであるので、再生しやすい形に変える
+  if (!u.startsWith("data:")) return u;
+  return URL.createObjectURL(await (await fetch(u)).blob());
+}
+
+async function load(v) {
+  ver = v;
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.key === v.key));
+  document.getElementById("cover").src = v.cover;
+  document.getElementById("bg").style.backgroundImage = `url(${v.poster})`;
+  const wasPlaying = !audio.paused;
+  audio.src = await src(v.mp3);
+  const dl = document.getElementById("dl");
+  dl.href = audio.src;
+  dl.download = `${SONG.title}(${v.label}).mp3`;
+  dl.textContent = `この曲をダウンロード(${v.size})`;
+
+  box.innerHTML = "";
+  lines = v.lyrics.map((L, i) => {
+    const el = document.createElement("div");
+    el.className = "line" + (i > 0 && L.sec !== v.lyrics[i - 1].sec ? " gap" : "");
+    const spans = [...L.text].map(ch => { const s = document.createElement("span"); s.textContent = ch; el.appendChild(s); return s; });
+    el.onclick = () => { audio.currentTime = Math.max(0, L.t[0] - 0.3); audio.play(); };
+    box.appendChild(el);
+    return { el, spans, t: L.t, start: L.t[0], end: L.t[L.t.length - 1] + 0.5 };
+  });
+  cur = -1;
+  box.scrollTop = 0;
+  if (wasPlaying) audio.play();
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `${SONG.title}(${v.label})`, artist: SONG.artist, album: SONG.title,
+      artwork: [{ src: v.cover, sizes: "600x600", type: "image/jpeg" }],
+    });
+  }
+}
+
+function frame() {
+  const t = audio.currentTime;
+  // 今歌っている行: 始まってから、次の行が始まるまで(長い間奏では消す)
+  let n = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const next = lines[i + 1] ? lines[i + 1].start : Infinity;
+    if (t >= lines[i].start - 0.15 && t < Math.min(next - 0.15, lines[i].end + 2.5)) { n = i; break; }
+  }
+  if (n !== cur) {
+    lines.forEach((L, i) => {
+      L.el.classList.toggle("now", i === n);
+      L.el.classList.toggle("past", n >= 0 ? i < n : L.start < t);
+    });
+    if (n >= 0 && Date.now() > userScrollUntil) {
+      const el = lines[n].el;
+      box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2, behavior: "smooth" });
+    }
+    cur = n;
+  }
+  if (n >= 0) {  // 1文字ずつ、歌った分だけ色を塗る
+    const L = lines[n];
+    L.spans.forEach((s, i) => {
+      const a = L.t[i], b = i + 1 < L.t.length && L.t[i + 1] > a ? L.t[i + 1] : a + 0.35;
+      const p = Math.min(1, Math.max(0, (t - a) / (b - a)));
+      s.style.setProperty("--p", (p * 100).toFixed(1) + "%");
+    });
+  }
+  if (audio.duration) {
+    seek.value = (t / audio.duration) * 1000;
+    document.getElementById("cur").textContent = fmt(t);
+  }
+  requestAnimationFrame(frame);
+}
+
+document.getElementById("play").onclick = () => audio.paused ? audio.play() : audio.pause();
+audio.onplay = () => document.querySelector("#icon path").setAttribute("d", PAUSE);
+audio.onpause = () => document.querySelector("#icon path").setAttribute("d", PLAY);
+audio.onloadedmetadata = () => document.getElementById("dur").textContent = fmt(audio.duration);
+seek.oninput = () => { if (audio.duration) audio.currentTime = seek.value / 1000 * audio.duration; };
+["touchstart", "wheel"].forEach(e => box.addEventListener(e, () => userScrollUntil = Date.now() + 3000, { passive: true }));
+
+const tabs = document.getElementById("tabs");
+SONG.versions.forEach(v => {
+  const b = document.createElement("button");
+  b.textContent = v.label; b.dataset.key = v.key; b.onclick = () => ver !== v && load(v);
+  tabs.appendChild(b);
+});
+load(SONG.versions[0]);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

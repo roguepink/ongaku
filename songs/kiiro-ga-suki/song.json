@@ -1,0 +1,10 @@
+{
+  "slug": "kiiro-ga-suki",
+  "title": "黄色が好き",
+  "artist": "deathmaturi",
+  "color": "#ffd23f",
+  "versions": [
+    {"key": "uta", "label": "歌版", "created": "2026-09-20"},
+    {"key": "rap", "label": "ラップ版", "created": "2026-09-15"}
+  ]
+}
