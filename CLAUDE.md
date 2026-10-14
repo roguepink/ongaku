@@ -21,7 +21,12 @@
    最後の「ご視聴ありがとうございました」は聞き間違いなので捨てている
 4. 配る用: `python3 tools/make_dist.py songs/<曲>`(1曲 約5MB)
 5. 試しのページ: `python3 tools/build_preview.py songs/<曲> [--single]`
-   `--single` は曲も画像も1ファイルに入れた版(ノブさんのスマホに送る用、work/ にできる。GitHub には入れない)
+   `--single` は曲も画像も1ファイルに入れた版(Mac で開く用、work/ にできる。GitHub には入れない)
+   ※ このチャットからノブさんのスマホへファイルは送れない。見てもらうのはホームページの試作ページで
+6. ホームページへ: `python3 tools/export_to_home.py songs/<曲> [--draft]`
+   → home-page の `public/music/<曲>/` と `src/app/music/songs/<曲>.json` ができる。`src/app/music/songs.ts` の SONGS に足す
+   → ブランチ → PR → Vercel が success → マージ。ページは `roguepink.com/music/<曲>`
+   `--draft` は試作: 音楽の一覧に出さず、検索にも出さない
 
 ## ノブさんの決めたこと(2026-10-13〜14)
 - ダウンロードは軽く(mp3、1曲 数MB)。動画はつけない。MV は頼まれた曲だけ別に作る
